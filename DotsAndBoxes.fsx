@@ -1,7 +1,15 @@
-﻿open System.Windows.Forms
+﻿#r "PresentationCore.dll"
+#r "WindowsBase.dll"
+#r "System.Xaml.dll"
+
+open System.Windows.Forms
 open System.Drawing
+open System.IO
+open System.Windows.Media.Imaging
 
 let rand = System.Random()
+
+let demoGif = new GifBitmapEncoder()
 
 let width, height = 700,700      
 let form = new Form(Width = width, Height = height)
@@ -16,11 +24,12 @@ type Box(row:int,col:int) =
 
 type Player = {
     Color: Color
+    ImagePath: string
 }
 with member p.Brush = new SolidBrush(p.Color)
 
-let p1 = {Player.Color = Color.LightBlue}
-let p2 = {Player.Color = Color.Pink}
+let p1 = {Player.Color = Color.LightBlue; ImagePath = @"C:\Dojos\dots-and-boxes\lobster.png"}
+let p2 = {Player.Color = Color.Pink; ImagePath = @"C:\Dojos\dots-and-boxes\whalecat.jpg"}
 
 let drawEdge (g:Graphics) (pen: Pen) edgeType i j =
     let startDotI,startDotJ,endDotI,endDotJ =
@@ -32,7 +41,7 @@ let drawEdge (g:Graphics) (pen: Pen) edgeType i j =
     g.DrawLine(pen,Point(50 + 50*startDotJ,50 + 50*startDotI),Point(50 + 50*endDotJ, 50 + 50*endDotI))
 
 let fillBox (g:Graphics) (player:Player) (box:Box) =
-    g.FillRectangle(player.Brush,50 + 50*box.Column, 50 + 50*box.Row, 50, 50)
+    g.DrawImage(Image.FromFile(player.ImagePath),50 + 50*box.Column, 50 + 50*box.Row, 50, 50)
 
 let b1 = Box(4,4)
 
@@ -121,6 +130,16 @@ with
                 graphics.FillEllipse(brush, Rectangle(Point(45+50 * i,45+50*j), Size(10,10)))
 
         box.Image <- image
+
+        let bs =
+            System.Windows.Interop.Imaging.CreateBitmapSourceFromHBitmap(
+                image.GetHbitmap(),
+                System.IntPtr.Zero,
+                System.Windows.Int32Rect.Empty,
+                BitmapSizeOptions.FromEmptyOptions());
+        let bf = BitmapFrame.Create(bs)
+        demoGif.Frames.Add(bf)
+
         form.Controls.Add(box) 
         box.BringToFront()
         box.Refresh()
@@ -129,6 +148,8 @@ type Ai = GameState -> Move option
 
 let randomAi (gs:GameState) =
     
+    let p = if (rand.Next()) % 2 = 0 then p1 else p2
+
     let verticalMoves = 
         gs.Verticals 
             |> Array.mapi (fun i col -> 
@@ -136,8 +157,8 @@ let randomAi (gs:GameState) =
             |> Array.concat
             |> Array.choose (fun o ->
                 match o with
-                | Some(i,j) when i+1 < gs.Size -> Some {Move.Player = p1; EdgeType = Left; Box=Box(i+1,j+1)}
-                | Some(i,j) -> Some {Player=p1; EdgeType=Right; Box=Box(i+1,j)}
+                | Some(i,j) when i+1 < gs.Size -> Some {Move.Player = p; EdgeType = Left; Box=Box(i+1,j+1)}
+                | Some(i,j) -> Some {Player=p; EdgeType=Right; Box=Box(i+1,j)}
                 | None -> None
             )
 
@@ -148,8 +169,8 @@ let randomAi (gs:GameState) =
         |> Array.concat
         |> Array.choose (fun o ->
             match o with
-            | Some(i,j) when j+1 < gs.Size -> Some {Move.Player = p1; EdgeType = Top; Box=Box(i+1,j+1)}
-            | Some(i,j) -> Some {Player=p1; EdgeType=Bottom; Box=Box(i,j+1)}
+            | Some(i,j) when j+1 < gs.Size -> Some {Move.Player = p; EdgeType = Top; Box=Box(i+1,j+1)}
+            | Some(i,j) -> Some {Player=p; EdgeType=Bottom; Box=Box(i,j+1)}
             | None -> None
         )
 
@@ -182,6 +203,7 @@ let randomAi (gs:GameState) =
 //|> GameState.FromMoves 10
 //|> (fun x -> x.Draw())
 
+
 let rec evokeAi (ai:Ai) (gs:GameState) =
     gs.Draw()
     match ai gs with
@@ -192,3 +214,5 @@ let rec evokeAi (ai:Ai) (gs:GameState) =
         evokeAi ai gs'
 
 evokeAi randomAi <| GameState.Fresh(10)
+
+demoGif.Save(new FileStream(@"C:\Dojos\dots-and-boxes\demo.gif",FileMode.Create))
